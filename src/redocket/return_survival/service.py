@@ -8,6 +8,8 @@ from ..settings import MODEL_LABEL, TARGET
 from .challenge import score_distribution, stress_row
 from .contracts import Fit, LearningRow
 from .estimator import explain, infer, train
+from .horizon import HORIZON_DAYS, build as build_horizon, card as horizon_card
+from .horizon import estimate as horizon_estimate, evidence as horizon_evidence
 
 
 MIN_SUPPORT = 24
@@ -56,6 +58,7 @@ def fit(signals: list[Signal], labels: dict[str, Outcome]) -> Fit:
         state = train(rows)
         if state is None:
             warnings.append("MODEL_UNIDENTIFIABLE")
+    horizon_state = build_horizon(rows) if TARGET == "censored" else None
     return Fit(
         state,
         len(rows),
@@ -63,6 +66,7 @@ def fit(signals: list[Signal], labels: dict[str, Outcome]) -> Fit:
         benchmarks,
         tuple(row.signal.record.case_id for row in rows),
         tuple(warnings),
+        horizon_state,
     )
 
 
@@ -98,4 +102,15 @@ def card(model: Fit) -> dict:
         "cohort_priors": model.by_group,
         "warnings": list(model.warnings),
         "parameters": explain(model.state) if model.state is not None else {},
+        "horizon": horizon_card(model.horizon),
     }
+
+
+def horizon(model: Fit, signal: Signal):
+    """派单用的固定时距仍未归还概率。"""
+    return horizon_estimate(model.horizon, signal)
+
+
+def horizon_row(model: Fit, signal: Signal) -> dict:
+    return {**horizon_evidence(horizon(model, signal)), "case_id": signal.record.case_id}
+

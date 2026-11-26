@@ -41,6 +41,8 @@ def verify(plan):
     for entry in allocated:
         if entry.source != "trained":
             raise AccountingError("人工复核或回退单据不能占用自动分派额度")
+        if entry.horizon_eligible is False:
+            raise AccountingError("时距概率未过半的单据不能占用车位")
         actual[entry.resource] += entry.units
     if (
         dict(actual) != plan.resource_use

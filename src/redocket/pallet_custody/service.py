@@ -125,3 +125,17 @@ def stage(packet: dict, as_of: int) -> Intake:
 def known_labels(intake: Intake, day: int) -> dict[str, Outcome]:
     visible = {item.case_id: item for item in intake.outcomes if item.available <= day}
     return {case_id: label for case_id, label in visible.items() if label.value >= 0}
+
+
+def returned_by(intake: Intake, day: int) -> set[str]:
+    """快照日已确认归还的单据，应当撤出当班候选。
+
+    以截至 ``day`` 已知的最后一份回执为准：在途回执（``occurred`` 为假）只说明
+    观察结束时还没归还，留在候选继续估计。相互矛盾的结果已由接入时置为无效值，
+    不会误撤。
+    """
+    return {
+        case_id
+        for case_id, label in known_labels(intake, day).items()
+        if label.occurred
+    }

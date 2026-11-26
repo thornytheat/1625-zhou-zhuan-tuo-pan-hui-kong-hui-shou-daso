@@ -27,6 +27,7 @@ class Assessment:
     radius: float | None
     test_passed: bool
     report: dict
+    horizon_passed: bool = False
 
 
 @dataclass(frozen=True)
@@ -36,3 +37,14 @@ class ScoreCard:
     prior: float
     lower: float | None
     upper: float | None
+    horizon: object | None = None
+    horizon_passed: bool = False
+
+
+@dataclass(frozen=True)
+class HorizonPair:
+    case_id: str
+    group: str
+    actual: int
+    predicted: float
+    source: str

@@ -30,3 +30,4 @@ class Fit:
     by_group: dict[str, float]
     training_cases: tuple[str, ...]
     warnings: tuple[str, ...]
+    horizon: dict | None = None

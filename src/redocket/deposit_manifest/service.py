@@ -39,8 +39,10 @@ def compile_delivery(
             "states": states,
             "reasons": causes,
             "rejected": sum(counts_by_stream.values()),
+            "withdrawn": len(plan.returned),
             "trained": model["training_support"],
         },
+        "returned": list(plan.returned),
         "resource": plan.resource_use,
         "intake": {
             "incoming": intake.source_counts,

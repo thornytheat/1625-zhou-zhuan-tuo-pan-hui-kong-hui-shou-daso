@@ -17,20 +17,21 @@ def quota(value: int) -> int:
     return value
 
 
-def allocate(pairs, capacity: int, snapshot=None) -> Allocation:
-    return allocate_requests(
-        [
-            project_request(
-                card,
-                gate,
-                snapshot + 1 + (card.signal.record.day - snapshot + 11) // 3
-                if snapshot is not None
-                else None,
-            )
-            for card, gate in pairs
-        ],
-        capacity,
-    )
+def allocate(pairs, capacity: int, snapshot=None, withdrawn=()) -> Allocation:
+    done = set(withdrawn)
+    requests = [
+        project_request(
+            card,
+            gate,
+            snapshot + 1 + (card.signal.record.day - snapshot + 11) // 3
+            if snapshot is not None
+            else None,
+        )
+        for card, gate in pairs
+        if card.signal.record.case_id not in done
+    ]
+    allocation = allocate_requests(requests, capacity)
+    return replace(allocation, returned=tuple(sorted(done)))
 
 
 def allocate_requests(requests, capacity: int) -> Allocation:

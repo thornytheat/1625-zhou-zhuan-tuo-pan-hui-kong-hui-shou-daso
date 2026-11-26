@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from .pallet_custody.service import known_labels, sample, stage
+from .pallet_custody.service import known_labels, returned_by, sample, stage
 from .route_age.service import (
     encode,
     fit_audit,
@@ -10,7 +10,7 @@ from .route_age.service import (
     reference_summary,
     trace,
 )
-from .return_survival.service import fit, forecast_card
+from .return_survival.service import fit, forecast_card, horizon_row
 from .censored_replay.service import backcheck, score_card, split
 from .lane_population.service import decide, readiness, review, shift_alerts
 from .retrieval_slots.service import (
@@ -42,9 +42,15 @@ def plan(packet=None, *, as_of=DEFAULT_DAY, capacity=DEFAULT_BUDGET):
     model = fit(history, known_labels(training_snapshot, bounds.train_before - 1))
     assessment = backcheck(signals, intake, bounds, model)
     # 候选只用在快照日已入账的单据，候选结果标签不参与得分。
-    ready = [
+    eligible = [
         item for item in signals if bounds.validate_before <= item.record.day <= as_of
     ]
+    # 快照日已确认归还的托盘直接撤出候选；晚到的归还记录不影响当班结果。
+    returned = returned_by(intake, as_of)
+    withdrawn = tuple(
+        sorted(row.record.case_id for row in eligible if row.record.case_id in returned)
+    )
+    ready = [row for row in eligible if row.record.case_id not in returned]
     shifts = review(history, ready)
     current_groups = {}
     historic_groups = {}
@@ -86,9 +92,10 @@ def plan(packet=None, *, as_of=DEFAULT_DAY, capacity=DEFAULT_BUDGET):
             "used_source": rules.source,
             "operational_check": operating,
             "operating_context": local,
+            "horizon": horizon_row(model, signal),
             "sensitivity": measure_sensitivity(signal, bank, ("age", "collectors")),
         }
-    result = allocate(decisions, capacity, as_of)
+    result = allocate(decisions, capacity, as_of, withdrawn)
     return compile_delivery(
         snapshot=as_of,
         plan=result,

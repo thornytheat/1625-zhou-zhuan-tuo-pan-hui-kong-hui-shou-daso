@@ -18,6 +18,10 @@ class Request:
     reason: str
     details: tuple[str, ...]
     next_step: str
+    horizon: float | None = None
+    horizon_exact: str | None = None
+    horizon_source: str | None = None
+    horizon_eligible: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -26,3 +30,4 @@ class Allocation:
     used: int
     resource_use: dict[str, int]
     decisions: tuple[Request, ...]
+    returned: tuple[str, ...] = ()

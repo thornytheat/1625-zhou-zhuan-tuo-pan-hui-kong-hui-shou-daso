@@ -144,3 +144,29 @@ def evaluate(rows, radius):
             abs(row.actual - row.predicted) <= radius for row in observed
         ) / len(observed)
     return result
+
+
+def evaluate_horizon(rows):
+    """以固定时距仍未归还为目标的回放。"""
+    if not rows:
+        return {
+            "support": 0,
+            "positives": 0,
+            "prevalence": None,
+            "brier": None,
+            "reference_brier": None,
+            "accuracy": None,
+            "eligible": 0,
+        }
+    actual = [row.actual for row in rows]
+    predicted = [row.predicted for row in rows]
+    base = sum(actual) / len(actual)
+    return {
+        "support": len(rows),
+        "positives": sum(actual),
+        "prevalence": base,
+        "brier": mean((p - a) ** 2 for p, a in zip(predicted, actual)),
+        "reference_brier": mean((base - a) ** 2 for a in actual),
+        "accuracy": mean((p > 0.5) == bool(a) for p, a in zip(predicted, actual)),
+        "eligible": sum(p > 0.5 for p in predicted),
+    }

@@ -2,6 +2,8 @@
 
 `GET /api/plan?capacity=16` 返回默认快照下的完整方案。`POST /api/plan` 支持提交本地记录，`packet` 内仅含 `observations` 和 `outcomes` 列表。
 
+逐单决策新增 `horizon`（显示概率）、`horizon_exact`（精确分数）、`horizon_source`（`lane`／`overall`／`manual`）和 `horizon_eligible`（是否严格过半）。方案级 `returned` 与 `summary.withdrawn` 给出快照日已确认归还、已撤出候选的单据。
+
 `GET /api/summary` 返回简读版。`GET /api/decisions/<case_id>` 回读对应测量与标准化特征。`GET /api/compare?capacity=16&against=0` 显示两档额度的逐单状态变更。
 
 以下模块证据可通过 `/api/modules/` 下的相同名称访问。

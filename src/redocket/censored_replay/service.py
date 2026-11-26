@@ -2,14 +2,93 @@ from collections import defaultdict
 from dataclasses import replace
 
 from ..pallet_custody.service import known_labels
-from ..return_survival.service import score
+from ..return_survival.horizon import observed_not_returned
+from ..return_survival.service import horizon as horizon_estimate, score
 from ..settings import METRIC_LABEL, TARGET
-from .contracts import Assessment, Folds, Paired, ScoreCard
-from .evaluation import apply_calibration, calibrate, evaluate, percentile
+from .contracts import Assessment, Folds, HorizonPair, Paired, ScoreCard
+from .evaluation import (
+    apply_calibration,
+    calibrate,
+    evaluate,
+    evaluate_horizon,
+    percentile,
+)
 
 
 def split(as_of):
     return Folds(as_of - 63, as_of - 34, as_of - 11, as_of)
+
+
+def horizon_paired(signals, intake, after, before, reference_day, model):
+    """按固定时距仍未归还构造回放对，只取能判明历史结局的单据。"""
+    labels = known_labels(intake, reference_day)
+    pairs = []
+    for item in signals:
+        if not (after <= item.record.day < before):
+            continue
+        if item.record.arrived > reference_day:
+            continue
+        label = labels.get(item.record.case_id)
+        if label is None:
+            continue
+        if item.record.reported.get("age") is None:
+            continue
+        actual = observed_not_returned(label.value, label.occurred)
+        if actual is None:
+            continue
+        estimate = horizon_estimate(model, item)
+        if not estimate.available:
+            continue
+        pairs.append(
+            HorizonPair(
+                item.record.case_id,
+                item.record.group,
+                int(actual),
+                float(estimate.probability),
+                estimate.source,
+            )
+        )
+    return pairs
+
+
+def backcheck_horizon(signals, intake, bounds, model):
+    calibration = horizon_paired(
+        signals,
+        intake,
+        bounds.train_before,
+        bounds.calibrate_before,
+        bounds.calibrate_before - 1,
+        model,
+    )
+    holdout = horizon_paired(
+        signals,
+        intake,
+        bounds.calibrate_before,
+        bounds.validate_before,
+        bounds.snapshot - 1,
+        model,
+    )
+    overall = evaluate_horizon(holdout)
+    grouped = defaultdict(list)
+    for row in holdout:
+        grouped[row.group].append(row)
+    support_ok = len(calibration) >= 16 and overall["support"] >= 16
+    loss, benchmark = overall["brier"], overall["reference_brier"]
+    passed = (
+        loss is not None
+        and benchmark is not None
+        and loss <= 1.25 * benchmark + 0.05
+    )
+    report = {
+        "horizon_days": model.horizon["horizon"] if model.horizon else None,
+        "calibration_cases": len(calibration),
+        "holdout_cases": len(holdout),
+        "overall": overall,
+        "groups": {k: evaluate_horizon(rows) for k, rows in sorted(grouped.items())},
+        "passed": passed and support_ok,
+        "decision_threshold": 0.5,
+    }
+    return support_ok and passed, report
 
 
 def paired(signals, intake, after, before, reference_day, model):
@@ -100,7 +179,9 @@ def backcheck(signals, intake, bounds, model):
         and len(calibration) >= 16
         and overall["observed_support"] >= 16
     )
-    return Assessment(steps, radius, gate, report)
+    horizon_gate, horizon_report = backcheck_horizon(signals, intake, bounds, model)
+    report["horizon"] = horizon_report
+    return Assessment(steps, radius, gate, report, horizon_gate)
 
 
 def score_card(model, assessment, signal):
@@ -112,4 +193,12 @@ def score_card(model, assessment, signal):
         else None
     )
     upper = estimate + assessment.radius if assessment.radius is not None else None
-    return ScoreCard(signal, estimate, prior, lower, upper)
+    return ScoreCard(
+        signal,
+        estimate,
+        prior,
+        lower,
+        upper,
+        horizon_estimate(model, signal),
+        assessment.horizon_passed,
+    )
